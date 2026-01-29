@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly To-Do Tracker</title>
+
+    <style>
+        /* General Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        body.dark {
+            background: #121212;
+        }
+
+        .app {
+            background: #fff;
+            width: 100%;
+            max-width: 1000px;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark .app {
+            background: #1e1e1e;
+            color: #fff;
+        }
+
+        h2 {
+            text-align: center;
+            font-size: 1.5rem;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        input {
+            flex: 1 1 auto;
+            padding: 10px;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        body.dark input,
+        body.dark button {
+            background: #333;
+            color: #fff;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            min-width: 600px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 4px;
+            text-align: center;
+        }
+
+        body.dark th,
+        body.dark td {
+            border-color: #444;
+        }
+
+        th.task {
+            text-align: left;
+            min-width: 120px;
+        }
+
+        /* Canvas */
+        canvas {
+            width: 100%;
+            max-width: 100%;
+            height: 350px;
+            margin-top: 20px;
+            border-radius: 8px;
+        }
+
+        body.dark canvas {
+            background: #2a2a2a;
+        }
+
+        /* Progress text */
+        .progress {
+            text-align: center;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        /* Mobile adjustments */
+        @media(max-width: 600px) {
+            h2 {
+                font-size: 1.3rem;
+            }
+
+            button,
+            input {
+                font-size: 0.9rem;
+                padding: 8px;
+            }
+
+            canvas {
+                height: 250px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <h2>Monthly To-Do Tracker</h2>
+
+        <button id="themeToggle">🌙 Dark Mode</button>
+
+        <div class="controls">
+            <input id="taskInput" placeholder="Add new task">
+            <button onclick="addTask()">Add</button>
+            <button onclick="resetData()">Reset All</button>
+        </div>
+
+        <div class="table-container">
+            <table id="tracker"></table>
+        </div>
+
+        <canvas id="polygonChart" width="900" height="350"></canvas>
+
+        <div class="progress" id="progressText">Progress: 0%</div>
+    </div>
+
+    <script>
+        const DAYS = 30;
+        const presetTasks = ["Wake up at 4am", "Exercise ", "5 Km run", "60 Pushups", "100 Situps", "3 Hour study"];
+        const tracker = document.getElementById("tracker");
+        const canvas = document.getElementById("polygonChart");
+        const ctx = canvas.getContext("2d");
+        const progressText = document.getElementById("progressText");
+        const themeToggle = document.getElementById("themeToggle");
+        const taskInput = document.getElementById("taskInput");
+
+        const now = new Date();
+        const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+
+        let data = JSON.parse(localStorage.getItem("monthlyData"));
+        let savedMonth = localStorage.getItem("monthKey");
+
+        /* Reset on new month */
+        if (!data || savedMonth !== monthKey) {
+            data = presetTasks.map(t => ({ name: t, days: Array(DAYS).fill(false) }));
+            localStorage.setItem("monthKey", monthKey);
+            saveData();
+        }
+
+        function saveData() { localStorage.setItem("monthlyData", JSON.stringify(data)); }
+
+        /* Add task */
+        function addTask() {
+            const val = taskInput.value.trim();
+            if (!val) return;
+            data.push({ name: val, days: Array(DAYS).fill(false) });
+            taskInput.value = "";
+            saveData();
+            render();
+        }
+
+        /* Remove task */
+        function removeTask(index) {
+            if (!confirm(`Remove task "${data[index].name}"?`)) return;
+            data.splice(index, 1);
+            saveData();
+            render();
+        }
+
+        /* Reset everything */
+        function resetData() {
+            if (!confirm("Are you sure you want to delete all saved data?")) return;
+            localStorage.removeItem("monthlyData");
+            localStorage.removeItem("monthKey");
+            location.reload(); // reload to reset everything
+        }
+
+        /* Render table */
+        function render() {
+            tracker.innerHTML = "";
+            const header = document.createElement("tr");
+            header.innerHTML =
+                `<th class="task">Task</th>` +
+                Array.from({ length: DAYS }, (_, i) => `<th>${i + 1}</th>`).join("") +
+                `<th>Remove</th>`;
+            tracker.appendChild(header);
+
+            data.forEach((task, index) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `<th class="task">${task.name}</th>`;
+                task.days.forEach((val, i) => {
+                    const td = document.createElement("td");
+                    const cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.checked = val;
+                    cb.onchange = () => { task.days[i] = cb.checked; saveData(); updateProgress(); };
+                    td.appendChild(cb);
+                    row.appendChild(td);
+                });
+                // Remove button
+                const removeTd = document.createElement("td");
+                const btn = document.createElement("button");
+                btn.textContent = "🗑️";
+                btn.onclick = () => removeTask(index);
+                removeTd.appendChild(btn);
+                row.appendChild(removeTd);
+                tracker.appendChild(row);
+            });
+
+            updateProgress();
+        }
+
+        /* Progress and polygon chart */
+        function updateProgress() {
+            let total = 0, done = 0;
+            const taskCompletion = data.map(task => {
+                const completedDays = task.days.filter(d => d).length;
+                total += DAYS; done += completedDays;
+                return completedDays / DAYS;
+            });
+            const percent = total ? Math.round(done / total * 100) : 0;
+            progressText.textContent = `Progress: ${percent}%`;
+            drawPolygon(taskCompletion);
+        }
+
+        /* Draw polygon with task labels */
+        function drawPolygon(values) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const n = values.length;
+            if (n === 0) return;
+
+            const cx = canvas.width / 2, cy = canvas.height / 2;
+            const radius = Math.min(cx, cy) - 50;
+            const angleStep = (Math.PI * 2) / n;
+            const color = document.body.classList.contains("dark") ? "#4fc3f7" : "#007bff";
+
+            // grid
+            ctx.strokeStyle = "#888"; ctx.lineWidth = 1;
+            for (let i = 1; i <= 5; i++) { ctx.beginPath(); ctx.arc(cx, cy, (radius / 5) * i, 0, Math.PI * 2); ctx.stroke(); }
+
+            // axes
+            for (let i = 0; i < n; i++) { const angle = i * angleStep - Math.PI / 2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)); ctx.stroke(); }
+
+            // polygon
+            ctx.beginPath();
+            values.forEach((v, i) => { const angle = i * angleStep - Math.PI / 2; const r = v * radius; const x = cx + r * Math.cos(angle); const y = cy + r * Math.sin(angle); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+            ctx.closePath(); ctx.fillStyle = color + "55"; ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+
+            // labels
+            ctx.fillStyle = document.body.classList.contains("dark") ? "#fff" : "#000";
+            ctx.font = "12px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            values.forEach((_, i) => {
+                const angle = i * angleStep - Math.PI / 2;
+                const x = cx + (radius + 20) * Math.cos(angle);
+                const y = cy + (radius + 20) * Math.sin(angle);
+                ctx.fillText(data[i].name, x, y);
+            });
+        }
+
+        /* Dark mode */
+        if (localStorage.getItem("theme") === "dark") { document.body.classList.add("dark"); themeToggle.textContent = "☀️ Light Mode"; }
+        themeToggle.onclick = () => {
+            document.body.classList.toggle("dark");
+            const dark = document.body.classList.contains("dark");
+            themeToggle.textContent = dark ? "☀️ Light Mode" : "🌙 Dark Mode";
+            localStorage.setItem("theme", dark ? "dark" : "light");
+            updateProgress();
+        }
+
+        render();
+    </script>
+</body>
+
+</html>
